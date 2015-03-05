@@ -81,10 +81,6 @@
         </dependency>
         <dependency>
             <groupId>ezbake</groupId>
-            <artifactId>ezbake-logging-logback-appenders</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>ezbake</groupId>
             <artifactId>ezbake-base-thrift-service</artifactId>
         </dependency>
         <dependency>
