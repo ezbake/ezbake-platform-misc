@@ -1,0 +1,127 @@
+#!/bin/bash -e
+#   Copyright (C) 2013-2014 Computer Sciences Corporation
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
+source $OPENSHIFT_CARTRIDGE_SDK_BASH
+
+readonly LS_TEMP_FILE=${LS_TEMP_FILE:-"/etc/sysconfig/ezbake/logstash.conf.erb"}
+readonly CONF_DIR="${OPENSHIFT_HOMEDIR}/app-root/runtime/configuration"
+readonly CONF_FILE="$CONF_DIR/logstash.conf"
+readonly LOG_FILE="${OPENSHIFT_LOG_DIR}/logstash.log"
+readonly PID_FILE="${OPENSHIFT_HOMEDIR}/app-root/runtime/logstash.pid"
+readonly LOGSTASH_DIR=${LOGSTASH_DIR:-"/opt/logstash"}
+
+# A quick function which will log messages to the log file message will
+# have the date attached to them.
+#
+# Arguments:
+#   $* = The log message that we will use
+function log() {
+    echo "[$(date)]: $*" | tee -a $LOG_FILE       
+}
+
+function is_running() {
+    if [ -f "$PID_FILE" ]; then
+        local lspid=$(cat $PID_FILE);
+        if /bin/ps -p $lspid 1>&2 >/dev/null;
+        then
+            return 0
+        fi 
+    fi
+    
+    return 1
+}
+
+function create_dir_if_not_exists {
+    if [ -z "$1" ]
+    then
+        return
+    fi
+
+    local dir_name=$1
+    if [ ! -d $dir_name ]
+    then
+        mkdir -p $dir_name
+    fi
+}
+
+function start() {
+    log "Attempting to start logstash cartridge"
+    if is_running
+    then
+        local lspid=$(cat $PID_FILE);
+        log "Logstatsh is already running with pid ${lspid}"
+    else
+        # Start logstash agent
+        
+        # Step 1 fill in template with environment variables
+        create_dir_if_not_exists $CONF_DIR
+        erb $LS_TEMP_FILE > $CONF_FILE
+
+        # Step 2 start logstash 
+        nohup ${LOGSTASH_DIR}/bin/logstash agent -f $CONF_FILE -l $LOG_FILE &
+        local ret=$?
+        if [ $ret -ne 0 ]; then
+            log "Logstash failed to start - $ret"
+            return $ret
+        fi
+        echo $! > $PID_FILE
+    fi 
+}
+
+function stop() {
+    log "Attempting to stop logstash cartridge"
+    if is_running 
+    then
+        local lspid=$(cat $PID_FILE);
+        log "Stopping logstash by sending SIGTERM to ${lspid}"
+        kill -s SIGTERM $lspid
+        log "Successfully stopped logstash cartridge"
+        if [ -f $CONF_FILE ]
+        then
+            rm -v $CONF_FILE
+        fi
+    else
+        log "Logstash is not currently running!"
+    fi
+}
+
+function restart() {
+    log "Restarting logstash cartridge"
+    stop
+    start
+}
+
+function status() {
+    if is_running
+    then
+        client_result "Logstash is currently running"
+    else
+        client_result "Logstatsh is not currently running!"
+    fi
+}
+
+if ! [ $# -gt 0 ]; then
+    echo "Usage: $0 [start|stop|restart|status]"
+    exit 1
+fi
+
+case "$1" in 
+    start)      start ;;
+    stop)       stop ;;
+    restart)    restart ;;
+    status)     status ;;
+    *)          exit 0
+esac
+

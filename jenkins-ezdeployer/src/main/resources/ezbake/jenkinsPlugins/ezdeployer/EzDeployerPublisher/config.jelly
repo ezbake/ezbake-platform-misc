@@ -1,0 +1,32 @@
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout"
+         xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+
+  <f:entry title="Deployment Packages">
+    <f:repeatable var="p" name="packages" items="${instance.packages}" minimum="0"
+                  add="Add Deployment Package">
+      <table width="100%">
+
+
+        <f:entry title="Path to manifest file." description="Path to yml config file." field="manifestPath">
+          <f:textbox name="packages.manifestPath" value="${p.manifestPath}"/>
+        </f:entry>
+
+
+        <f:entry title="Path to package file." description="Path to package file." field="packagePath">
+          <f:textbox name="packages.packagePath" value="${p.packagePath}"/>
+        </f:entry>
+
+        <f:entry title="Config paths." description="List of ';' separated paths to the config files."
+                 field="configPaths">
+          <f:textbox name="packages.configPaths" value="${p.configPaths}"/>
+        </f:entry>
+        <f:entry title="">
+          <div align="right">
+            <f:repeatableDeleteButton/>
+          </div>
+        </f:entry>
+      </table>
+    </f:repeatable>
+  </f:entry>
+
+</j:jelly>

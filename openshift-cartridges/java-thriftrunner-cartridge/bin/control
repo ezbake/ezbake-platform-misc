@@ -1,0 +1,175 @@
+#!/bin/bash
+#   Copyright (C) 2013-2014 Computer Sciences Corporation
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
+source $OPENSHIFT_CARTRIDGE_SDK_BASH
+
+BIN_DIR=$(cd $(dirname $0); pwd)
+
+JAVA_THRIFT_RUNNER="/opt/ezbake/thriftrunner/bin/thriftrunner.jar"
+STETHOSCOPE_CLIENT="/opt/ezbake/ezbake-discovery-stethoscope-client/ezbake-discovery-stethoscope-client.jar"
+ROOT_WAR="/opt/ezbake/ezbake-utils-endpointhealth/root.war"
+LOGSHIFTER_PIPE="${OPENSHIFT_HOMEDIR}/app-root/runtime/logshifter-java-thriftrunner"
+
+function log() {
+    echo "$@" | tee -a  ${OPENSHIFT_JAVA_THRIFTRUNNER_LOG_DIR}/start.log
+}
+
+function start() {
+    log "Starting Java Thriftrunner cart"
+
+    log "Setting up logshifter pipe"
+    rm -f "${LOGSHIFTER_PIPE}" && mkfifo "${LOGSHIFTER_PIPE}"
+    /usr/bin/logshifter -tag java_thriftrunner < "${LOGSHIFTER_PIPE}" &
+    echo $! > "${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/run/logshifter.pid"
+
+    cd ${OPENSHIFT_REPO_DIR}
+
+    export EZCONFIGURATION_DIR=${EZCONFIGURATION_DIR:=/etc/sysconfig/ezbake}
+
+    log "Detected environment variables:"
+    log "  Java Version:           $(java -version 2>&1)"
+    log "  Application name:       ${OPENSHIFT_APP_NAME}"
+    log "  Application home:       ${OPENSHIFT_HOMEDIR}"
+    log "  Repository:             ${OPENSHIFT_REPO_DIR}"
+    log "  Internal IP:            ${OPENSHIFT_JAVA_THRIFTRUNNER_IP}"
+    log "  Internal TCP Port:      ${OPENSHIFT_JAVA_THRIFTRUNNER_TCP_PORT}"
+    log "  Internal HTTP Port:     ${OPENSHIFT_JAVA_THRIFTRUNNER_PORT}"
+    log "  External DNS:           ${OPENSHIFT_APP_DNS}"
+    log "  External HTTP(S) Port:  80/443"
+    log "  External TCP Port:      ${OPENSHIFT_JAVA_THRIFTRUNNER_TCP_PROXY_PORT}"
+    log "  EZCONFIGURATION_DIR:    ${EZCONFIGURATION_DIR}"
+    log "  Working directory:      $PWD"
+
+    if [ -x "${OPENSHIFT_REPO_DIR}/bin/start.sh" ]; then
+        log "Found start.sh"
+        log "Calling start.sh with app name, internal IP, internal TCP port, external DNS, and external TCP port"
+
+        nohup "${OPENSHIFT_REPO_DIR}/bin/start.sh" \
+            --service_name ${OPENSHIFT_APP_NAME} \
+            --private_host ${OPENSHIFT_JAVA_THRIFTRUNNER_IP} \
+            --private_port ${OPENSHIFT_JAVA_THRIFTRUNNER_TCP_PORT} \
+            --public_host ${OPENSHIFT_APP_DNS} \
+            --public_port ${OPENSHIFT_JAVA_THRIFTRUNNER_TCP_PROXY_PORT} > "${LOGSHIFTER_PIPE}" 2>&1 &
+
+        echo $! > ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/run/server.pid
+    elif [ -d "${OPENSHIFT_REPO_DIR}/bin" ]; then
+        log "Did not find start.sh"
+
+        jars=$(find ${OPENSHIFT_REPO_DIR}/bin -maxdepth 1 -name '*.jar')
+        numJars=`ls -l ${OPENSHIFT_REPO_DIR}/bin/*.jar | wc -l`
+        if [ "${numJars}" -ne 1 ]; then
+            log "Did not find exactly one jar bin!"
+            log "Not starting any Thrift service"
+        else
+            log "Found jar in bin"
+            log "Calling Java ThriftRunner with app name, internal IP, internal TCP port, external DNS, and external TCP port"
+
+            nohup java -Xmx1g -Xms1g \
+                -jar $JAVA_THRIFT_RUNNER \
+                --disable-service-registration \
+                -j $jars \
+                --private_host ${OPENSHIFT_JAVA_THRIFTRUNNER_IP} \
+                --private_port ${OPENSHIFT_JAVA_THRIFTRUNNER_TCP_PORT} \
+                --public_host ${OPENSHIFT_APP_DNS} \
+                --public_port ${OPENSHIFT_JAVA_THRIFTRUNNER_TCP_PROXY_PORT} > "${LOGSHIFTER_PIPE}" 2>&1 &
+            echo $! > ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/run/server.pid
+        fi
+    else
+        log "Did not find bin directory!"
+        log "Not starting Thrift service"
+    fi
+
+    log "Starting Stethoscope"
+    nohup java -jar $STETHOSCOPE_CLIENT \
+         --private-service-hostname ${OPENSHIFT_JAVA_THRIFTRUNNER_IP} \
+         --private-service-port ${OPENSHIFT_JAVA_THRIFTRUNNER_TCP_PORT} \
+         --public-service-hostname ${OPENSHIFT_APP_DNS} \
+         --public-service-port ${OPENSHIFT_JAVA_THRIFTRUNNER_TCP_PROXY_PORT} \
+         --checkin-interval "5" > ${OPENSHIFT_JAVA_THRIFTRUNNER_LOG_DIR}/stethoscope.log 2>&1 &
+    echo $! > ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/run/stethoscope.pid
+
+    log "Starting Jetty"
+    nohup java \
+         -Djava.io.tmpdir=${OPENSHIFT_DATA_DIR} \
+         -Djetty.host=${OPENSHIFT_JAVA_THRIFTRUNNER_IP} \
+         -Djetty.port=${OPENSHIFT_JAVA_THRIFTRUNNER_PORT} \
+         -jar ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/lib/jetty-runner.jar \
+	 --config ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/lib/jetty_config.xml \
+         ${ROOT_WAR} > ${OPENSHIFT_JAVA_THRIFTRUNNER_LOG_DIR}/jetty.log 2>&1 &
+    echo $! > ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/lib/jetty.pid
+}
+
+function stop() {
+    log "Stopping Java Thriftrunner cart"
+
+    if [ -f ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/run/server.pid ]; then
+        SERVER_PID=$(cat ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/run/server.pid)
+        log "Sending kill signal to kill service process $SERVER_PID"
+        kill $SERVER_PID
+        mv ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/run/server.pid ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/run/server.pid.old
+    fi
+
+    if [ -f ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/lib/jetty.pid ]; then
+        JETTY_PID=$(cat ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/lib/jetty.pid)
+        log "Sending kill signal to kill service process $JETTY_PID"
+        kill $JETTY_PID
+        mv ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/lib/jetty.pid ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/lib/jetty.pid.old
+    fi
+
+    if [ -f $OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/run/stethoscope.pid ]; then
+        STETHOSCOPE_PID=$(cat ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/run/stethoscope.pid)
+        log "Sending kill singal to kill service process $STETHOSCOPE_PID"
+        kill $STETHOSCOPE_PID
+        mv ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/run/stethoscope.pid ${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/run/stethoscope.pid.old
+    fi
+
+    if [ -f "${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/run/logshifter.pid" ]; then
+        LOGSHIFTER_PID=$(cat "${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/run/logshifter.pid")
+	log "Sending kill signal to kill service process ${LOGSHIFTER_PID}"
+	kill ${LOGSHIFTER_PID}
+        mv "${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/run/logshifter.pid" "${OPENSHIFT_JAVA_THRIFTRUNNER_DIR}/run/logshifter.pid.old"
+    fi
+}
+
+function restart() {
+    log "Restarting Java Thriftrunner cart"
+    stop
+    start
+}
+
+function status() {
+    log "Status!"
+}
+
+function reload() {
+    client_result "Reloading Java Thriftrunner cart"
+    restart
+}
+
+function tidy() {
+  client_message "Emptying log dir: $OPENSHIFT_JAVA_THRIFTRUNNER_LOG_DIR"
+  shopt -s dotglob
+  rm -rf $OPENSHIFT_JAVA_THRIFTRUNNER_LOG_DIR/*
+}
+
+case "$1" in
+  start)     start ;;
+  stop)      stop ;;
+  restart)   restart ;;
+  status)    status ;;
+  reload)    reload ;;
+  tidy)      tidy ;;
+  *)         exit 0
+esac

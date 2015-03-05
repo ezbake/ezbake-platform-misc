@@ -1,0 +1,24 @@
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+  <!--
+    This Jelly script is used to produce the global configuration option.
+
+    Jenkins uses a set of tag libraries to provide uniformity in forms.
+    To determine where this tag is defined, first check the namespace URI,
+    and then look under $JENKINS/views/. For example, <f:section> is defined
+    in $JENKINS/views/lib/form/section.jelly.
+
+    It's also often useful to just check other similar scripts to see what
+    tags they use. Views are always organized according to its owner class,
+    so it should be straightforward to find them.
+  -->
+  <f:section title="EZ Deployer">
+    <f:entry title="EZ Deployer Instance Name" field="instanceName"
+             description="This sets which instance of EZ Deployer this plugin connects to.">
+      <f:textbox default="ezdeployer" />
+    </f:entry>
+    <f:entry title="Path to Properties File Directory" field="propFile"
+        description="This properties file will set the path to the ssl certs and sets the zookeeper connection key.">
+      <f:textbox default="/opt/ezbake"/>
+    </f:entry>
+  </f:section>
+</j:jelly>

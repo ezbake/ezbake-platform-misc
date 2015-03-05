@@ -1,0 +1,110 @@
+#!/bin/bash
+#   Copyright (C) 2013-2014 Computer Sciences Corporation
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
+source $OPENSHIFT_CARTRIDGE_SDK_BASH
+
+PLAY_FRAMEWORK_PID_FILE=${OPENSHIFT_HOMEDIR}app-root/runtime/play-framework.pid
+PLAY_FRAMEWORK_DISTDIR=${OPENSHIFT_HOMEDIR}app-root/runtime/play-framework-dist
+
+function start() {
+    echo "Starting Play Framework cartridge"
+    zipfile=$(ls -1 ${OPENSHIFT_HOMEDIR}/app-root/repo/deployments | head -n 1)
+    if [ -z "$zipfile" ]; then
+        client_message "Missing deployment archive in deployments/"
+        return
+    else
+        echo "Found deployment archive $zipfile"
+    fi
+
+    tmp=$(mktemp -d)
+    unzip -q -d $tmp ${OPENSHIFT_HOMEDIR}app-root/repo/deployments/$zipfile
+    dir=$(ls -1 $tmp | head -n 1)
+    rm -rf $PLAY_FRAMEWORK_DISTDIR
+    mkdir -p $PLAY_FRAMEWORK_DISTDIR
+    mv ${tmp}/${dir}/* $PLAY_FRAMEWORK_DISTDIR
+    rmdir ${tmp}/${dir}
+    echo "Extracted ${dir} from ${zipfile}"
+
+    binfile=$(ls -1 $PLAY_FRAMEWORK_DISTDIR/bin | grep -E -v '.*\.bat')
+    if [ -z "$binfile" ]; then
+        echo "Missing Play Framework binary in distribution archive"
+        return
+    else
+        echo "Found Play Framework binary $binfile"
+    fi
+
+    echo "Logging to $OPENSHIFT_LOG_DIR"
+    mkdir -p $OPENSHIFT_LOG_DIR
+    ln -fs $OPENSHIFT_LOG_DIR $PLAY_FRAMEWORK_DISTDIR/logs
+
+    echo "Using $($JAVA_HOME/bin/java -version 2>&1)" 
+
+    nohup $PLAY_FRAMEWORK_DISTDIR/bin/$binfile \
+        -Dhttp.port=${OPENSHIFT_PLAY_FRAMEWORK_HTTP_PORT} \
+        -Dhttp.address=${OPENSHIFT_PLAY_FRAMEWORK_PRIVATE_IP} \
+        -Dapplication.secret=${OPENSHIFT_SECRET_TOKEN} \
+        -Dpidfile.path=${PLAY_FRAMEWORK_PID_FILE} \
+        -Dlogger.file=${OPENSHIFT_HOMEDIR}/play-framework/configuration/logger.xml |& \
+        /usr/bin/logshifter -tag play-framework &
+}
+
+function stop() {
+    echo "Stopping Play Framework cartridge"
+    if [ -f ${PLAY_FRAMEWORK_PID_FILE} ]; then
+        kill $(cat ${PLAY_FRAMEWORK_PID_FILE})
+
+        echo "Removing pidfile ${PLAY_FRAMEWORK_PID_FILE}"
+        # rm -f so we don't error if Play Framework has cleaned up after itself
+        # and removed its own pidfile.
+        rm -f ${PLAY_FRAMEWORK_PID_FILE}
+    else
+        echo "No pidfile found. Cartridge may not have been running."
+    fi
+}
+
+function restart() {
+    stop
+    start
+}
+
+function status() {
+   if output=$(curl http://$OPENSHIFT_PLAY_FRAMEWORK_IP:$OPENSHIFT_PLAY_FRAMEWORK_HTTP_PORT 2>&1 )
+   then
+      client_result "Application is running"
+   else
+      client_result "Application is either stopped or inaccessible"
+   fi
+}
+
+function reload() {
+    client_result "Reloading Play Framework cartridge"
+    restart
+}
+
+function tidy() {
+  client_message "Emptying Play Framework logs in dir: $OPENSHIFT_LOG_DIR"
+  shopt -s dotglob
+  rm -rf $OPENSHIFT_LOG_DIR/play-framework.log*
+}
+
+case "$1" in
+  start)     start ;;
+  stop)      stop ;;
+  restart)   restart ;;
+  status)    status ;;
+  reload)    reload ;;
+  tidy)      tidy ;;
+  *)         exit 0
+esac
