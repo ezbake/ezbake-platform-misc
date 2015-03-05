@@ -96,11 +96,6 @@
             </dependency>
             <dependency>
                 <groupId>ezbake</groupId>
-                <artifactId>ezbake-logging-logback-appenders</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>ezbake</groupId>
                 <artifactId>ezbake-base-thrift</artifactId>
                 <version>${project.version}</version>
             </dependency>
