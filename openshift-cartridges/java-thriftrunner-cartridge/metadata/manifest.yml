@@ -1,0 +1,106 @@
+#   Copyright (C) 2013-2014 Computer Sciences Corporation
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
+Name: java-thriftrunner
+Cartridge-Short-Name: JAVA_THRIFTRUNNER
+Display-Name: Java Thriftrunner 0.1
+Description: "Launches Java Thrift applications with the Java Thriftrunner or calls custom start scripts"
+Version: '0.1'
+Source-Url: ezbake-platform-misc/openshift-cartridges/java-thriftrunner-cartridge
+License: "ASL 2.0"
+License-Url: http://www.apache.org/licenses/LICENSE-2.0.txt
+Cartridge-Version: 0.1
+Cartridge-Vendor: 42six
+Vendor: 42six
+Categories:
+  - web_framework
+  - service
+Website: ezbake-platform-misc/openshift-cartridges/java-thriftrunner-cartridge
+Help-Topics:
+  "Getting Started": https://www.openshift.com/community/videos/getting-started-with-diy-applications-on-openshift
+Cart-Data:
+  - Key: OPENSHIFT_JAVA_THRIFTRUNNER_LOG_DIR
+    Type: environment
+    Description: "Directory to store application log files."
+  - Key: OPENSHIFT_TMP_DIR
+    Type: environment
+    Description: "Directory to store application temporary files."
+  - Key: OPENSHIFT_REPO_DIR
+    Type: environemnt
+    Description: "Application root directory where application files reside. This directory is reset every time you do a git-push"
+  - Key: OPENSHIFT_JAVA_THRIFTRUNNER_PORT
+    Type: environment
+    Description: "Internal port to which the web-framework binds to."
+  - Key: OPENSHIFT_JAVA_THRIFTRUNNER_IP
+    Type: environment
+    Description: "Internal IP to which the web-framework binds to."
+  - Key: OPENSHIFT_JAVA_THRIFTRUNNER_EXTRA_PORT
+    Type: environment
+    Description: "Internal port for something other than web-framework to bind to."
+  - Key: OPENSHIFT_JAVA_THRIFTRUNNER_EXTRA_PROXY_PORT
+    Type: environment
+    Description: "External node port to reach non-web-framework port."
+  - Key: OPENSHIFT_APP_DNS
+    Type: environment
+    Description: "Fully qualified domain name for the application."
+  - Key: OPENSHIFT_APP_NAME
+    Type: environment
+    Description: "Application name"
+  - Key: OPENSHIFT_DATA_DIR
+    Type: environment
+    Description: "Directory to store application data files. Preserved across git-pushes. Not shared across gears."
+  - Key: OPENSHIFT_APP_UUID
+    Type: environment
+    Description: "Unique ID which identified the application. Does not change between gears."
+  - Key: OPENSHIFT_GEAR_UUID
+    Type: environment
+    Description: "Unique ID which identified the gear. This value changes between gears."
+Provides:
+  - java-thriftrunner-0.1
+  - java-thriftrunner
+Publishes:
+  publish-http-url:
+    Type: "NET_TCP:httpd-proxy-info"
+  publish-gear-endpoint:
+    Type: "NET_TCP:gear-endpoint-info"
+Subscribes:
+  set-db-connection-info:
+    Type: "ENV:NET_TCP:db:connection-info"
+    Required: false
+  set-nosql-db-connection-info:
+    Type: "ENV:NET_TCP:nosqldb:connection-info"
+    Required: false
+Scaling:
+  Min: 1
+  Max: 1
+Group-Overrides:
+  - components:
+    - web-proxy
+Endpoints:
+  - Private-IP-Name:   IP
+    Private-Port-Name: PORT
+    Private-Port:      8080
+    Public-Port-Name:  PROXY_PORT
+    Mappings:
+      - Frontend:      ""
+        Backend:       ""
+        Options:       { websocket: true }
+      - Frontend:      "/health"
+        Backend:       ""
+        Options:       { health: true }
+  - Private-IP-Name:   IP
+    Private-Port-Name: TCP_PORT
+    Private-Port:      16000
+    Public-Port-Name:  TCP_PROXY_PORT
+    Options:           { "ssl_to_gear": true }

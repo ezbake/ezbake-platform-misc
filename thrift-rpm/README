@@ -1,0 +1,1 @@
+RPM spec to build Apache Thrift in CentOS 6. This spec is not derived from the spec in Fedora EPEL: <http://pkgs.fedoraproject.org/cgit/thrift.git>.

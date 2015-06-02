@@ -1,0 +1,6 @@
+ezbake-logstash-helper*.tar.gz
+ezbake-logstash-helper*.rpm
+.vagrant/
+build/
+log.log
+nohup.out

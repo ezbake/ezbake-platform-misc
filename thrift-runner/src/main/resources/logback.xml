@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<configuration debug="true">
+
+    <appender name="FRACK" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%-4relative [%thread] %-5level %class - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <if condition='isDefined("log_file")'>
+    <then>
+        <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <File>${log_file}</File>
+            <rollingPolicy class="ezbake.logging.logback.ExternalRotateRollingPolicy" />
+            <encoder class="ch.qos.logback.core.encoder.LayoutWrappingEncoder">
+                <layout class="ch.qos.logback.classic.PatternLayout">
+                    <pattern>${HOSTNAME} %d [%thread] %-5level %logger{36} - %msg%n</pattern>
+                </layout>
+            </encoder>
+        </appender> 
+        <root level="INFO">
+            <appender-ref ref="FILE" />
+        </root> 
+    </then>
+    </if>
+
+    <if condition='isDefined("log_stdout") &amp;&amp; property("log_stdout").equalsIgnoreCase("true")'>
+    <then>
+        <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="ch.qos.logback.core.encoder.LayoutWrappingEncoder">
+                <layout class="ch.qos.logback.classic.PatternLayout">
+                    <pattern>${HOSTNAME} %d [%thread] %-5level %logger{36} - %msg%n</pattern>
+                </layout>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="STDOUT" />
+        </root>
+    </then>
+    </if>
+
+    <logger name="ezbake.frack">
+        <appender-ref ref="FRACK" />
+    </logger>
+
+</configuration>
